@@ -29,8 +29,10 @@ extern "C" {
  *   注意：FDCAN 内核时钟源已改为 **HSE 8 MHz**（见 mcan.c），
  *         原因见 board.h 的说明（8 MHz 才能精确整除 800 kbps）。
  *
- *   说明：必须在 main() 开头调用（HAL_Init() 之后）。
- *         170 MHz 需要 PWR_REGULATOR_VOLTAGE_SCALE1_BOOST 与 FLASH_LATENCY_4。
+ *   说明：必须在 main() 开头调用（内核初始化之后）。
+ *         本函数内部会先按当前主频启动 SysTick 时基（供配置期间的超时使用），
+ *         并在 PLL 稳定后由调用方再次调用 SysTick_Init() 以 170 MHz 重新标定。
+ *         170 MHz 需要 PWR 的 Range 1 boost 档与 FLASH_LATENCY_4。
  *
  *   容错：时钟配置失败时保持 HSI 16 MHz 运行并返回 -1，不阻塞，
  *         以便主循环闪灯报错、故障可在现场观察到。

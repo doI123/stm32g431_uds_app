@@ -26,6 +26,9 @@
 #include "board.h"
 #include "mcan.h"
 
+#include "stm32g4xx_ll_bus.h"
+#include "stm32g4xx_ll_pwr.h"
+
 /*******************************************************************************
  * 内部变量
  ******************************************************************************/
@@ -49,12 +52,12 @@ static int32_t  CanCfg_WriteBkp(uint32_t u32Value);
  */
 static void CanCfg_BackupAccessEnable(void)
 {
-    /* 1. PWR 提供 DBP 写保护开关 */
-    __HAL_RCC_PWR_CLK_ENABLE();
-    /* 2. 备份寄存器所在时钟域（STM32G4 无独立 TAMPEN 位） */
-    __HAL_RCC_RTCAPB_CLK_ENABLE();
+    /* 1. PWR 提供 DBP 写保护开关（PWR 挂在 APB1） */
+    LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
+    /* 2. 备份寄存器所在时钟域（STM32G4 无独立 TAMPEN 位，用 RTCAPBEN） */
+    LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_RTCAPB);
     /* 3. 解除备份域写保护 */
-    HAL_PWR_EnableBkUpAccess();
+    LL_PWR_EnableBkUpAccess();
 }
 
 /**

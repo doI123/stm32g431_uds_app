@@ -11,7 +11,7 @@
 #ifndef __MAIN_H__
 #define __MAIN_H__
 
-#include "stm32g4xx_hal.h"
+#include "stm32g4xx.h"
 #include "board.h"
 
 #endif /* __MAIN_H__ */

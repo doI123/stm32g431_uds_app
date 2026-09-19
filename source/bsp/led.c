@@ -19,17 +19,19 @@
 #include "led.h"
 #include "board.h"
 
+#include "stm32g4xx_ll_bus.h"
+#include "stm32g4xx_ll_gpio.h"
 #include "clock.h"
 
 /*******************************************************************************
  * 宏定义
  ******************************************************************************/
 #if (LED_ACTIVE_HIGH != 0)
-#define LED_WRITE(on)   HAL_GPIO_WritePin(LED_GPIO_PORT, LED_GPIO_PIN, \
-                                          (on) ? GPIO_PIN_SET : GPIO_PIN_RESET)
+#define LED_WRITE(on)   do { if (on) { LL_GPIO_SetOutputPin(LED_GPIO_PORT, LED_GPIO_PIN); } \
+                             else   { LL_GPIO_ResetOutputPin(LED_GPIO_PORT, LED_GPIO_PIN); } } while (0)
 #else
-#define LED_WRITE(on)   HAL_GPIO_WritePin(LED_GPIO_PORT, LED_GPIO_PIN, \
-                                          (on) ? GPIO_PIN_RESET : GPIO_PIN_SET)
+#define LED_WRITE(on)   do { if (on) { LL_GPIO_ResetOutputPin(LED_GPIO_PORT, LED_GPIO_PIN); } \
+                             else   { LL_GPIO_SetOutputPin(LED_GPIO_PORT, LED_GPIO_PIN); } } while (0)
 #endif
 
 /*******************************************************************************
@@ -49,15 +51,14 @@ static uint8_t  m_u8State           = 0U;
  */
 void Led_Init(void)
 {
-    GPIO_InitTypeDef stcGpio = {0};
+    /* GPIOC 时钟（LED_GPIO_PORT 固定为 GPIOC，见 board.h） */
+    LL_AHB2_GRP1_EnableClock(LL_AHB2_GRP1_PERIPH_GPIOC);
 
-    __HAL_RCC_GPIOC_CLK_ENABLE();
-
-    stcGpio.Pin   = LED_GPIO_PIN;
-    stcGpio.Mode  = GPIO_MODE_OUTPUT_PP;
-    stcGpio.Pull  = GPIO_NOPULL;
-    stcGpio.Speed = GPIO_SPEED_FREQ_LOW;
-    HAL_GPIO_Init(LED_GPIO_PORT, &stcGpio);
+    /* 推挽输出、低速、无上下拉 —— 与改造前的 HAL 配置逐项等价 */
+    LL_GPIO_SetPinMode(LED_GPIO_PORT, LED_GPIO_PIN, LL_GPIO_MODE_OUTPUT);
+    LL_GPIO_SetPinOutputType(LED_GPIO_PORT, LED_GPIO_PIN, LL_GPIO_OUTPUT_PUSHPULL);
+    LL_GPIO_SetPinSpeed(LED_GPIO_PORT, LED_GPIO_PIN, LL_GPIO_SPEED_FREQ_LOW);
+    LL_GPIO_SetPinPull(LED_GPIO_PORT, LED_GPIO_PIN, LL_GPIO_PULL_NO);
 
     Led_Off();
 }

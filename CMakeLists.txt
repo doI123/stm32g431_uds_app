@@ -8,17 +8,19 @@ project(stm32g431_uds_app ASM C)
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 
 # ---------------------------------------------------------------------------
-# 路径：STM32CubeG4 固件包（位于工作区内）
+# 路径：驱动已内置到工程内（100% LL，不依赖工作区外的 stm32cubeg4 包）
+#   drivers/STM32CubeG4_V1.6.0/ 下只含 CMSIS + stm32g4xx_ll_*.h，
+#   **没有任何 HAL 源码**，因此本工程不含 HAL 驱动。
 # ---------------------------------------------------------------------------
 if(NOT DEFINED STM32CUBE_ROOT)
-    get_filename_component(STM32CUBE_ROOT
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../stm32cubeg4-v1-6-0/STM32Cube_FW_G4_V1.6.0"
-        ABSOLUTE)
+    set(STM32CUBE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/drivers/STM32CubeG4_V1.6.0)
 endif()
 
-set(HAL_DIR        ${STM32CUBE_ROOT}/Drivers/STM32G4xx_HAL_Driver)
-set(HAL_INC        ${HAL_DIR}/Inc)
-set(HAL_SRC        ${HAL_DIR}/Src)
+# 目录名沿用厂商包的 Drivers/STM32G4xx_HAL_Driver —— 其 Inc/ 同时装着
+# stm32g4xx_ll_*.h（本工程实际使用的头文件）与 stm32g4xx_hal_*.h（未内置、
+# 也不参与编译，仅因厂商目录结构如此）。
+set(CUBE_DRV_DIR   ${STM32CUBE_ROOT}/Drivers/STM32G4xx_HAL_Driver)
+set(LL_INC         ${CUBE_DRV_DIR}/Inc)
 set(CMSIS_INC      ${STM32CUBE_ROOT}/Drivers/CMSIS/Include)
 set(CMSIS_DEV_INC  ${STM32CUBE_ROOT}/Drivers/CMSIS/Device/ST/STM32G4xx/Include)
 set(CMSIS_DEV_SRC  ${STM32CUBE_ROOT}/Drivers/CMSIS/Device/ST/STM32G4xx/Source/Templates)
@@ -28,7 +30,7 @@ set(PROJ_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/source)
 
 # 按功能分层的源码子目录（新增模块时在此登记）
 set(APP_DIR   ${PROJ_SOURCE_DIR}/app)            # 应用层：启动与版本标识
-set(BSP_DIR   ${PROJ_SOURCE_DIR}/bsp)            # 板级支持：board/clock/led/HAL 裁剪配置
+set(BSP_DIR   ${PROJ_SOURCE_DIR}/bsp)            # 板级支持：board/clock/led
 set(CORE_DIR  ${PROJ_SOURCE_DIR}/core)           # 核心服务：事件与调度（预留）
 set(UDS_DIR   ${PROJ_SOURCE_DIR}/uds)            # 诊断协议栈（ISO-TP + UDS 服务）
 set(CAN_DIR   ${PROJ_SOURCE_DIR}/drivers/can)    # CAN 外设驱动
@@ -46,12 +48,13 @@ set(FW_HW_VER      "HW_A1")
 
 # ---------------------------------------------------------------------------
 # 头文件搜索路径
-#   ${BSP_DIR} 必须排在 HAL_INC 之前：stm32g4xx_hal.h 会 #include
-#   "stm32g4xx_hal_conf.h"，需要先命中本工程 bsp/ 下的裁剪版配置
-#   （HAL_INC 里只有 *_template.h，命中失败会直接编译报错）。
+#   LL 是**纯头文件**实现（全部 __STATIC_INLINE），头文件位于厂商包的
+#   Drivers/STM32G4xx_HAL_Driver/Inc（见上面的 LL_INC）。
 #
-#   ⚠️ 全部工程目录都写在 HAL_INC 之前，是为了让本工程同名头文件
-#      优先于固件包被命中；新增层目录请一并加在此处。
+#   ⚠️ 全部工程目录都写在 LL_INC 之前，好让本工程同名头文件优先于固件包被
+#      命中；HAL 已完全移出本工程（无 stm32g4xx_hal_conf.h、无 HAL 源码），
+#      因此此处不再需要为 HAL 裁剪配置预留优先级。
+#      新增层目录请一并加在此处。
 # ---------------------------------------------------------------------------
 include_directories(
     ${BSP_DIR}
@@ -59,7 +62,7 @@ include_directories(
     ${UDS_DIR}
     ${CAN_DIR}
     ${GEN_DIR}
-    ${HAL_INC}
+    ${LL_INC}
     ${CMSIS_DEV_INC}
     ${CMSIS_INC}
 )
@@ -69,7 +72,6 @@ include_directories(
 # ---------------------------------------------------------------------------
 add_compile_definitions(
     STM32G431xx
-    USE_HAL_DRIVER
     HSE_VALUE=8000000UL
     HSE_STARTUP_TIMEOUT=100U
     FW_ROLE_ID=${FW_ROLE_NAME}
@@ -129,25 +131,15 @@ set(DEVICE_SOURCES
     ${STARTUP_SRC}/startup_stm32g431xx.s
 )
 
-set(HAL_SOURCES
-    ${HAL_SRC}/stm32g4xx_hal.c
-    ${HAL_SRC}/stm32g4xx_hal_cortex.c
-    ${HAL_SRC}/stm32g4xx_hal_rcc.c
-    ${HAL_SRC}/stm32g4xx_hal_rcc_ex.c
-    ${HAL_SRC}/stm32g4xx_hal_gpio.c
-    ${HAL_SRC}/stm32g4xx_hal_flash.c
-    ${HAL_SRC}/stm32g4xx_hal_flash_ex.c
-    ${HAL_SRC}/stm32g4xx_hal_pwr.c
-    ${HAL_SRC}/stm32g4xx_hal_pwr_ex.c
-    ${HAL_SRC}/stm32g4xx_hal_fdcan.c
-)
+# 说明：本工程 100% 使用 LL 库。LL 是**纯头文件**实现（全部 __STATIC_INLINE），
+#       因此这里没有 HAL_SOURCES —— 不存在任何 stm32g4xx_hal_*.c 参与编译，
+#       也不需要 stm32g4xx_hal_conf.h。
 
 find_package(Python3 COMPONENTS Interpreter QUIET)
 
 add_executable(stm32g431_uds_app.elf
     ${APP_SOURCES}
     ${DEVICE_SOURCES}
-    ${HAL_SOURCES}
 )
 
 # ---------------------------------------------------------------------------
@@ -171,7 +163,6 @@ set_source_files_properties(${APP_DIR}/version.c
 # ---------------------------------------------------------------------------
 find_program(CMAKE_OBJCOPY arm-none-eabi-objcopy REQUIRED)
 find_program(CMAKE_SIZE    arm-none-eabi-size    REQUIRED)
-find_package(Python3 COMPONENTS Interpreter QUIET)
 
 add_custom_command(TARGET stm32g431_uds_app.elf POST_BUILD
     COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:stm32g431_uds_app.elf>

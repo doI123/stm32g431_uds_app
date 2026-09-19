@@ -36,7 +36,7 @@
  * 内部函数声明
  ******************************************************************************/
 static void App_VectorTableInit(void);
-static void App_HalInit(void);
+static void App_CoreInit(void);
 
 /*******************************************************************************
  * 全局函数
@@ -45,10 +45,9 @@ static void App_HalInit(void);
 /**
  * @brief  SysTick 中断服务函数（1 ms）。
  *
- *   必须同时调用 HAL_IncTick()：HAL 内部所有超时判断都用 HAL_GetTick()
- *   读取 uwTick，而 uwTick 只在 HAL_IncTick() 中自增。若漏调，
- *   HAL_RCC_OscConfig() / HAL_FDCAN_Init() 等函数一旦遇到需要等待的
- *   情况就会永远卡在超时循环里。
+ *   自 LL 化改造后，工程内已无 HAL，因此**不再需要** HAL_IncTick()。
+ *   全部超时判断（CAN 发送、Tx 排空、BusOff 恢复限流、UDS S3 会话超时、
+ *   帧间隔延时）统一读取 SysTick_GetTick()，只有这一个毫秒时基。
  *
  * @param  无
  * @retval 无
@@ -56,17 +55,33 @@ static void App_HalInit(void);
 void SysTick_Handler(void)
 {
     SysTick_IncTick();
-    HAL_IncTick();
 }
 
 /**
- * @brief  HAL 初始化。
+ * @brief  内核级初始化（替代改造前的 HAL_Init()）。
+ *
+ *   HAL_Init() 原先做三件事，现已拆分：
+ *     1) 配置中断优先级分组 —— 保留在本函数（下面这一条）；
+ *     2) 配置 SysTick 毫秒时基 —— 已由 Board_ClockInit() 内部先按
+ *        HSI 16 MHz 起时基（供时钟配置期间的超时使用），并在 main()
+ *        中 PLL 稳定后用 170 MHz 重新标定；
+ *     3) 回调 HAL_MspInit() 使能 PWR / SYSCFG 时钟 —— 已改为
+ *        clock.c 内的 Clock_EnablePwrAndSysCfgClock()。
+ *
  * @param  无
  * @retval 无
  */
-static void App_HalInit(void)
+static void App_CoreInit(void)
 {
-    HAL_Init();
+    /* 中断优先级分组 = 4 位抢占 + 0 位子优先级。
+     *
+     * 改造前是 HAL_NVIC_SetPriorityGrouping(NVIC_PRIORITYGROUP_4)，
+     * 它最终就是往 SCB->AIRCR.PRIGROUP 写 3 —— Cortex-M4 未实现
+     * 优先级位数大于 4 的位，因此 PRIGROUP=3 即"4 位全部用于抢占"。
+     * NVIC_SetPriorityGrouping() 是 CMSIS 内核函数（不是 HAL），
+     * 直接用数值 3 表达同一含义，避免再引入 HAL 的命名宏。
+     */
+    NVIC_SetPriorityGrouping(3U);
 }
 
 /**
@@ -97,14 +112,16 @@ static void App_VectorTableInit(void)
  */
 int main(void)
 {
-    /* 1. 先把向量表指向本镜像，再让 HAL 初始化（HAL 会用到中断） */
+    /* 1. 先把向量表指向本镜像，再做内核级初始化（中断优先级分组）。
+     *    注意：本工程已 100% 使用 LL，没有 HAL_Init()。 */
     App_VectorTableInit();
-    App_HalInit();
+    App_CoreInit();
 
-    /* 2. 系统时钟：8 MHz HSE -> 170 MHz。
-     *    注意：HAL_Init() 内部会回调 HAL_MspInit()，后者已在 clock.c 中实现
-     *    （使能 PWR / SYSCFG 时钟）。若缺少该实现，
-     *    下面的调压器配置会因 PWR 时钟未开而失败。 */
+    /* 2. 系统时钟：8 MHz HSE -> 170 MHz（LL 实现）。
+     *    注意：配置调压器前必须已使能 PWR 时钟 —— 这由 clock.c 内的
+     *    Clock_EnablePwrAndSysCfgClock() 保证。若缺这一步，PWR 寄存器写入
+     *    会被静默丢弃、SR2.VOSF 永远置位，本函数会超时失败，
+     *    主频停留在 HSI 16 MHz（此时只有"极快闪"能提示这一故障）。 */
     if (Board_ClockInit() != 0) {
         /* 时钟配置失败：主频仍为 HSI 16 MHz。
          * 此时 CAN 位时序不可信，但状态灯仍可工作，

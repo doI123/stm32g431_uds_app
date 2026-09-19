@@ -23,7 +23,15 @@
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
-#include "stm32g4xx_hal.h"
+/* 本工程 100 % 使用 LL 库，不再包含 HAL 头。
+ * stm32g4xx.h 会按 STM32G431xx 宏选入 stm32g431xx.h，
+ * 提供 TAMP/FDCAN/GPIO/RCC 等全部外设寄存器定义。
+ *
+ * 另外需要 LL 的 GPIO 头：引脚掩码与复用功能号都用 LL 的命名
+ * （LL_GPIO_PIN_x / LL_GPIO_AF_x），HAL 的 GPIO_PIN_x / GPIO_AFx_xxx
+ * 已随 HAL 一起移出本工程。该头是纯 inline 实现，不引入任何源码。 */
+#include "stm32g4xx.h"
+#include "stm32g4xx_ll_gpio.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -49,8 +57,9 @@ extern "C" {
  *   第 0 ~ 11 页 : 0x08000000 ~ 0x08005FFF   24 KB  Bootloader
  *   第 12 ~ 63 页: 0x08006000 ~ 0x0801FFFF  104 KB  Application
  *
- * 命名说明：这里刻意不叫 FLASH_PAGE_SIZE —— 该宏已由 HAL 的
- *           stm32g4xx_hal_flash.h 定义为 0x800U（同样是 2 KB）。
+ * 命名说明：这里刻意不叫 FLASH_PAGE_SIZE —— HAL 的 stm32g4xx_hal_flash.h
+ *           曾用该名字定义 0x800U（同为 2 KB 页）。本工程已 100 % 改用 LL
+ *           （LL 不提供该宏），保留 BOARD_ 前缀可避免日后引入其它库时撞名。
  */
 #define BOARD_FLASH_PAGE_SIZE         (0x00000800UL)   /* 2 KB */
 #define FLASH_PAGE_COUNT              (64U)            /* 128 KB / 2 KB */
@@ -176,12 +185,22 @@ extern "C" {
  *   PB9  = FDCAN1_TX
  *   PA11 = FDCAN1_RX
  * 注意：PA11/PA12 同时是 USB_DM/DP，本工程不使用 USB。
+ *
+ * 引脚掩码用 LL 的 LL_GPIO_PIN_x（HAL 的 GPIO_PIN_x 已随 HAL 移出）。
  */
 #define CAN_TX_GPIO_PORT              (GPIOB)
-#define CAN_TX_GPIO_PIN               (GPIO_PIN_9)
+#define CAN_TX_GPIO_PIN               (LL_GPIO_PIN_9)
 #define CAN_RX_GPIO_PORT              (GPIOA)
-#define CAN_RX_GPIO_PIN               (GPIO_PIN_11)
-#define CAN_GPIO_AF                   (GPIO_AF9_FDCAN1)
+#define CAN_RX_GPIO_PIN               (LL_GPIO_PIN_11)
+
+/* 复用功能号：FDCAN1 固定在 AF9（RM0440 的 GPIO 复用表中 FDCAN1_TX/RX = AF9）。
+ *
+ * ⚠️ 这里直接给 AF 编号，而不是 HAL 的 GPIO_AF9_FDCAN1 —— 后者定义在
+ *    stm32g4xx_hal_gpio_ex.h，已随 HAL 一起移出本工程。
+ *    LL 库用 LL_GPIO_AF_9（其值同样是 9），mcan.c 通过
+ *    LL_GPIO_SetAFPin_8_15() 写入，两者数值一致。
+ */
+#define CAN_GPIO_AF                   (9U)
 
 /* CAN 收发器 S（Standby / 使能）控制引脚 —— PC11。
  *
@@ -198,7 +217,7 @@ extern "C" {
  *       若所用器件极性相反（S 高 = Normal），把它改为 1 即可。
  */
 #define CAN_STB_GPIO_PORT             (GPIOC)
-#define CAN_STB_GPIO_PIN              (GPIO_PIN_11)
+#define CAN_STB_GPIO_PIN              (LL_GPIO_PIN_11)
 #define CAN_STB_ACTIVE_HIGH           (0)
 
 /* ------------------- FDCAN 位时序（内核时钟 = HSE 8 MHz） -------------------
@@ -223,7 +242,7 @@ extern "C" {
  *   慢闪（500 ms）    -> App 正常运行心跳
  */
 #define LED_GPIO_PORT                 (GPIOC)
-#define LED_GPIO_PIN                  (GPIO_PIN_6)
+#define LED_GPIO_PIN                  (LL_GPIO_PIN_6)
 #define LED_ACTIVE_HIGH               (1)
 
 /* 时钟故障：极快闪，明确区别于正常心跳 */

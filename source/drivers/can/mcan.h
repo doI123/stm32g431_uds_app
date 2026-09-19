@@ -15,7 +15,7 @@
 #define __MCAN_H__
 
 #include <stdint.h>
-#include "board.h"      /* 提供 stm32g4xx_hal.h 与 FDCAN_* 类型 */
+#include "board.h"      /* 提供 stm32g4xx.h（CMSIS 寄存器定义）与板级宏 */
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,6 +27,23 @@ extern "C" {
 /* 通用返回码 */
 #define MCAN_OK                     (0)
 #define MCAN_ERR                    (-1)
+
+/* ---------------------------------------------------------------------------
+ * 控制器工作模式（Mcan_LoopbackTest 的 u32Mode 参数）
+ *
+ *   ⚠️ ST 的 LL 库**不提供 FDCAN 驱动**（无 stm32g4xx_ll_fdcan.h），
+ *      只有 HAL。因此本文件是 FDCAN 的唯一驱动层，直接操作 CMSIS 寄存器；
+ *      这两种回环模式也只在这里定义，数值与 HAL 的 FDCAN_MODE_* 保持一致，
+ *      便于与 ST 文档/RM0440 对照。
+ *
+ *   回环模式的用途（见 Mcan_LoopbackTest 说明）：
+ *     正常模式      0  接总线，需外部节点应答
+ *     内部回环      1  芯片内部把 TX 接回 RX，不驱动 TX 引脚
+ *     外部回环      2  自收自发，但真实驱动 TX 引脚
+ * ------------------------------------------------------------------------- */
+#define MCAN_MODE_NORMAL            (0x00000000UL)
+#define MCAN_MODE_INTERNAL_LOOPBACK (0x00000001UL)
+#define MCAN_MODE_EXTERNAL_LOOPBACK (0x00000002UL)
 
 /* ---------------------------------------------------------------------------
  * 支持的 CAN 波特率（位时序表在 mcan.c 的 s_astcBaudTable 中，唯一真值来源）
@@ -54,8 +71,8 @@ extern "C" {
 typedef struct {
     uint32_t u32Baudrate;   /* 实际速率，如 800000 */
     uint32_t u32Prescaler;  /* 预分频（本工程恒为 1） */
-    uint32_t u32TimeSeg1;   /* PS1（HAL 写入时自动减 1） */
-    uint32_t u32TimeSeg2;   /* PS2 */
+    uint32_t u32TimeSeg1;   /* PS1，实际值（写 NBTP 时硬件再自动减 1） */
+    uint32_t u32TimeSeg2;   /* PS2，实际值 */
     uint32_t u32Sjw;        /* 同步跳转宽度 */
     uint8_t  u8Code;        /* 档位码 */
 } mcan_baud_info_t;
@@ -297,7 +314,7 @@ void Mcan_InternalLoopbackSelfTest(uint32_t u32TestId, uint8_t *pu8Ok);
  *   本函数会把 FDCAN 重新初始化为回环模式，调用后必须再执行
  *   Mcan_Init() 才能恢复通信。
  *
- * @param  [in]  u32Mode   FDCAN_MODE_INTERNAL_LOOPBACK 或 FDCAN_MODE_EXTERNAL_LOOPBACK
+ * @param  [in]  u32Mode   MCAN_MODE_INTERNAL_LOOPBACK 或 MCAN_MODE_EXTERNAL_LOOPBACK
  * @param  [in]  u32TestId 自检使用的标准帧 ID
  * @param  [out] pu8Ok     1 = 通过，0 = 失败
  * @retval 无
