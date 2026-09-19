@@ -249,7 +249,7 @@ extern "C" {
 #define LED_FAULT_BLINK_MS            (60U)
 
 /* App 心跳指示周期（ms） */
-#define LED_BLINK_PERIOD_MS           (500U)
+#define LED_BLINK_PERIOD_MS           (1500U)
 
 /* ========================= 六、应用标识与运行参数 ========================= */
 
