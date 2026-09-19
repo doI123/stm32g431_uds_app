@@ -1,0 +1,28 @@
+{
+    // STM32G431CBU6 UDS Application 调试配置
+    //
+    // 注意：请先烧写 Bootloader，再调试 App；
+    //       Bootloader 只监听 500 ms 就会跳转 App，
+    //       因此这里建议直接下载运行，而不是依赖复位后抓窗口。
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "OpenOCD+DAPLink (STM32G431 App)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build/stm32g431_uds_app.elf",
+            "servertype": "openocd",
+            "serverpath": "C:/xpack-openocd-0.12.0-7-win32-x64/xpack-openocd-0.12.0-7/openocd/bin/openocd.exe",
+            "configFiles": [
+                "interface/cmsis-dap.cfg",
+                "target/stm32g4x.cfg"
+            ],
+            "searchDir": [
+                "C:/xpack-openocd-0.12.0-7-win32-x64/xpack-openocd-0.12.0-7/openocd/scripts"
+            ],
+            "runToEntryPoint": "main",
+            "preLaunchTask": "build-app"
+        }
+    ]
+}
